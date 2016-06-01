@@ -170,11 +170,12 @@ var DOMChildrenOperations = {
    * @param {array<object>} updates List of update configurations.
    * @internal
    */
-  processUpdates: function(parentNode, updates) {
+  processUpdates: function(hostNode, updates) {
     if (__DEV__) {
       var parentNodeDebugID =
-        ReactDOMComponentTree.getInstanceFromNode(parentNode)._debugID;
+        ReactDOMComponentTree.getInstanceFromNode(hostNode)._debugID;
     }
+    var parentNode = hostNode.nodeType === 8 ? hostNode.parentNode : hostNode;
 
     for (var k = 0; k < updates.length; k++) {
       var update = updates[k];

@@ -591,7 +591,7 @@ describe('ReactDOMComponent', function() {
       expect(setter.mock.calls.length).toBe(1);
     });
 
-    it('handles multiple child updates without interference', function() {
+    fit('handles multiple child updates without interference', function() {
       // This test might look like it's just testing ReactMultiChild but the
       // last bug in this was actually in DOMChildrenOperations so this test
       // needs to be in some DOM-specific test file.
@@ -600,9 +600,9 @@ describe('ReactDOMComponent', function() {
       // ABCD
       ReactDOM.render(
         <div>
-          <div key="one">
+          <frag key="one">
             <div key="A">A</div><div key="B">B</div>
-          </div>
+          </frag>
           <div key="two">
             <div key="C">C</div><div key="D">D</div>
           </div>
@@ -622,6 +622,7 @@ describe('ReactDOMComponent', function() {
         container
       );
 
+      expect(container.firstChild.firstChild.nodeType).toBe(8);
       expect(container.textContent).toBe('BADC');
     });
   });

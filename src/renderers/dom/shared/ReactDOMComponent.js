@@ -613,36 +613,47 @@ ReactDOMComponent.Mixin = {
     if (transaction.useCreateElement) {
       var ownerDocument = hostContainerInfo._ownerDocument;
       var el;
-      if (namespaceURI === DOMNamespaces.html) {
-        if (this._tag === 'script') {
-          // Create the script via .innerHTML so its "parser-inserted" flag is
-          // set to true and it does not execute
-          var div = ownerDocument.createElement('div');
-          var type = this._currentElement.type;
-          div.innerHTML = `<${type}></${type}>`;
-          el = div.removeChild(div.firstChild);
-        } else {
-          el = ownerDocument.createElement(this._currentElement.type, props.is || null);
-        }
+      if (namespaceURI === DOMNamespaces.html && this._tag === 'frag') {
+        el = ownerDocument.createDocumentFragment();
+        var commentEl = ownerDocument.createComment(' frag ');
+        el.insertBefore(commentEl, null);
+        ReactDOMComponentTree.precacheNode(this, commentEl);
+        this._flags |= Flags.hasCachedChildNodes;
       } else {
-        el = ownerDocument.createElementNS(
-          namespaceURI,
-          this._currentElement.type
-        );
+        if (namespaceURI === DOMNamespaces.html) {
+          if (this._tag === 'script') {
+            // Create the script via .innerHTML so its "parser-inserted" flag is
+            // set to true and it does not execute
+            var div = ownerDocument.createElement('div');
+            var type = this._currentElement.type;
+            div.innerHTML = `<${type}></${type}>`;
+            el = div.removeChild(div.firstChild);
+          } else {
+            el = ownerDocument.createElement(this._currentElement.type, props.is || null);
+          }
+        } else {
+          el = ownerDocument.createElementNS(
+            namespaceURI,
+            this._currentElement.type
+          );
+        }
+        ReactDOMComponentTree.precacheNode(this, el);
+        this._flags |= Flags.hasCachedChildNodes;
+        if (!this._hostParent) {
+          DOMPropertyOperations.setAttributeForRoot(el);
+        }
+        this._updateDOMProperties(null, props, transaction);
       }
-      ReactDOMComponentTree.precacheNode(this, el);
-      this._flags |= Flags.hasCachedChildNodes;
-      if (!this._hostParent) {
-        DOMPropertyOperations.setAttributeForRoot(el);
-      }
-      this._updateDOMProperties(null, props, transaction);
       var lazyTree = DOMLazyTree(el);
       this._createInitialChildren(transaction, props, context, lazyTree);
       mountImage = lazyTree;
     } else {
       var tagOpen = this._createOpenTagMarkupAndPutListeners(transaction, props);
       var tagContent = this._createContentMarkup(transaction, props, context);
-      if (!tagContent && omittedCloseTags[this._tag]) {
+      if(this._tag === 'frag') {
+        console.log("mountImage = tagContent")
+        mountImage = '<!-- frag -->' + tagContent;
+      } else if (!tagContent && omittedCloseTags[this._tag]) {
         mountImage = tagOpen + '/>';
       } else {
         mountImage =
