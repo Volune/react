@@ -29,6 +29,10 @@ import {lazy} from './ReactLazy';
 import forwardRef from './forwardRef';
 import memo from './memo';
 import {
+  inConditionalScope,
+  inNamedScopes,
+  inScope,
+
   useCallback,
   useContext,
   useEffect,
@@ -99,6 +103,10 @@ if (enableHooks) {
   React.useReducer = useReducer;
   React.useRef = useRef;
   React.useState = useState;
+
+  React.inConditionalScope = inConditionalScope;
+  React.inNamedScopes = inNamedScopes;
+  React.inScope = inScope;
 }
 
 export default React;

@@ -240,6 +240,141 @@ export function resetHooks(): void {
   numberOfReRenders = 0;
 }
 
+export function inScope(
+  Component
+): any {
+  workInProgressHook = createWorkInProgressHook();
+  return inScopeImpl(workInProgressHook, Component);
+}
+
+export function inNamedScopes(
+  callback: ((any, any, any) => any) => any,
+): any {
+  workInProgressHook = createWorkInProgressHook();
+  if (!workInProgressHook.memoizedState) {
+    workInProgressHook.memoizedState = {
+      namedScopes: new Map(),
+    };
+  }
+  const {namedScopes} = workInProgressHook.memoizedState;
+  const calledScopes = new Map();
+  const inNamedScope = (key, Component) => {
+    let current = namedScopes.get(key);
+    if (!current) {
+      current = {
+        memoizedState: null,
+      };
+      namedScopes.set(key, current);
+    }
+    const firstUseOfNamedScope = !calledScopes.get(key);
+    invariant(
+      firstUseOfNamedScope,
+      'Called scope with same name multiple times',
+    );
+    calledScopes.set(key, current);
+    return inScopeImpl(current, Component);
+  };
+  // TODO consider replacing namedScopes with calledScopes to free memory
+  return callback(inNamedScope);
+}
+
+export function inConditionalScope(
+  conditionTrue: boolean,
+  ComponentIfTrue,
+  ComponentIfFalse,
+): any {
+  return inNamedScopes(inNamedScope => {
+    if (conditionTrue) {
+      return inNamedScope(true, ComponentIfTrue);
+    } else if (ComponentIfFalse) {
+      return inNamedScope(false, ComponentIfFalse);
+    } else {
+      return null;
+    }
+  });
+}
+
+function inScopeImpl(
+  current: any,
+  Component: any,
+  props: any,
+  refOrContext: any,
+): any {
+  if (!enableHooks) {
+    return null;
+  }
+
+  let didRenderTooFewHooks = false;
+  let result = null;
+  const snapshot = {
+    componentUpdateQueue,
+    currentHook,
+    didScheduleRenderPhaseUpdate,
+    firstCurrentHook,
+    firstWorkInProgressHook,
+    numberOfReRenders,
+    renderPhaseUpdates,
+    workInProgressHook,
+  };
+
+  firstCurrentHook = current.memoizedState;
+  firstWorkInProgressHook = null;
+  numberOfReRenders = -1;
+  renderPhaseUpdates = null;
+
+  try {
+    do {
+      didScheduleRenderPhaseUpdate = false;
+      numberOfReRenders += 1;
+
+      // Start over from the beginning of the list
+      currentHook = null;
+      workInProgressHook = null;
+      componentUpdateQueue = null;
+
+      result = Component(props, refOrContext);
+
+      // Check if updates were scheduled during the render phase. They are stored
+      // in the `renderPhaseUpdates` map. Call the component again, reusing the
+      // work-in-progress hooks and applying the additional updates on top. Keep
+      // restarting until no more updates are scheduled.
+    } while (didScheduleRenderPhaseUpdate);
+
+    didRenderTooFewHooks = currentHook !== null && currentHook.next !== null;
+  } finally {
+    current.memoizedState = firstWorkInProgressHook;
+
+    if (!componentUpdateQueue) {
+      componentUpdateQueue = snapshot.componentUpdateQueue;
+    } else if (snapshot.componentUpdateQueue) {
+      const lastScopedEffect = componentUpdateQueue.lastEffect;
+      const firstScopedEffect = lastScopedEffect.next;
+      componentUpdateQueue = snapshot.componentUpdateQueue;
+      const lastEffect = componentUpdateQueue.lastEffect;
+      const firstEffect = lastEffect.next;
+      lastEffect.next = firstScopedEffect;
+      lastScopedEffect.next = firstEffect;
+      componentUpdateQueue.lastEffect = lastScopedEffect;
+    }
+
+    currentHook = snapshot.currentHook;
+    didScheduleRenderPhaseUpdate = snapshot.didScheduleRenderPhaseUpdate;
+    firstCurrentHook = snapshot.firstCurrentHook;
+    firstWorkInProgressHook = snapshot.firstWorkInProgressHook;
+    numberOfReRenders = snapshot.numberOfReRenders;
+    renderPhaseUpdates = snapshot.renderPhaseUpdates;
+    workInProgressHook = snapshot.workInProgressHook;
+  }
+
+  invariant(
+    !didRenderTooFewHooks,
+    'Rendered fewer hooks than expected. This may be caused by an accidental ' +
+    'early return statement.',
+  );
+
+  return result;
+}
+
 function createHook(): Hook {
   return {
     memoizedState: null,

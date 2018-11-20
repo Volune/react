@@ -22,6 +22,29 @@ function resolveDispatcher() {
   return dispatcher;
 }
 
+export function inConditionalScope<S>(
+  condition: boolean,
+  ComponentIfTrue: () => S,
+  ComponentIfFalse: (() => S) | null,
+) : S | null {
+  const dispatcher = resolveDispatcher();
+  return dispatcher.inConditionalScope(condition, ComponentIfTrue, ComponentIfFalse);
+}
+
+export function inNamedScopes<S>(
+  callback: () => S
+): S {
+  const dispatcher = resolveDispatcher();
+  return dispatcher.inNamedScopes(callback);
+}
+
+export function inScope<S>(
+  Component: () => S
+): S {
+  const dispatcher = resolveDispatcher();
+  return dispatcher.inScope(Component);
+}
+
 export function useContext<T>(
   Context: ReactContext<T>,
   observedBits: number | boolean | void,

@@ -9,6 +9,10 @@
 
 import {readContext} from './ReactFiberNewContext';
 import {
+  inConditionalScope,
+  inNamedScopes,
+  inScope,
+
   useCallback,
   useContext,
   useEffect,
@@ -22,6 +26,9 @@ import {
 } from './ReactFiberHooks';
 
 export const Dispatcher = {
+  inConditionalScope,
+  inNamedScopes,
+  inScope,
   readContext,
   useCallback,
   useContext,
