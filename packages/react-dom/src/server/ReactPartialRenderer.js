@@ -34,6 +34,7 @@ import {
   REACT_PORTAL_TYPE,
   REACT_PROFILER_TYPE,
   REACT_PROVIDER_TYPE,
+  REACT_FUNCTION_PROVIDER_TYPE,
   REACT_CONTEXT_TYPE,
   REACT_LAZY_TYPE,
   REACT_MEMO_TYPE,
@@ -841,7 +842,8 @@ class ReactDOMServerRenderer {
           } else if (
             frame.type != null &&
             frame.type.type != null &&
-            frame.type.type.$$typeof === REACT_PROVIDER_TYPE
+            (frame.type.type.$$typeof === REACT_PROVIDER_TYPE ||
+              frame.type.type.$$typeof === REACT_FUNCTION_PROVIDER_TYPE)
           ) {
             const provider: ReactProvider<any> = (frame.type: any);
             this.popProvider(provider);
@@ -1097,6 +1099,7 @@ class ReactDOMServerRenderer {
             this.stack.push(frame);
             return '';
           }
+          case REACT_FUNCTION_PROVIDER_TYPE:
           case REACT_PROVIDER_TYPE: {
             const provider: ReactProvider<any> = (nextChild: any);
             const nextProps = provider.props;

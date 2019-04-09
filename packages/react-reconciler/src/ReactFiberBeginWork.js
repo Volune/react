@@ -13,6 +13,8 @@ import type {FiberRoot} from './ReactFiberRoot';
 import type {ExpirationTime} from './ReactFiberExpirationTime';
 import type {SuspenseState} from './ReactFiberSuspenseComponent';
 
+import MAX_SIGNED_31_BIT_INT from './maxSigned31BitInt';
+
 import checkPropTypes from 'prop-types/checkPropTypes';
 
 import {
@@ -27,6 +29,7 @@ import {
   Fragment,
   Mode,
   ContextProvider,
+  ContextFunctionProvider,
   ContextConsumer,
   Profiler,
   SuspenseComponent,
@@ -639,6 +642,116 @@ function updateFunctionComponent(
     current,
     workInProgress,
     nextChildren,
+    renderExpirationTime,
+  );
+  return workInProgress.child;
+}
+
+function updateFunctionProviderComponent(
+  current,
+  workInProgress,
+  renderExpirationTime,
+) {
+  const oldProps = workInProgress.memoizedProps;
+  const newProps = workInProgress.pendingProps;
+  const providerType: ReactProviderType<any> = workInProgress.type;
+  const Component = providerType._component;
+  const providedContext: ReactContext<any> = providerType._context;
+  const unmaskedConsumedContext = getUnmaskedContext(workInProgress, Component, true);
+  const consumedContext = getMaskedContext(workInProgress, unmaskedConsumedContext);
+
+  let nextContextValue;
+  prepareToReadContext(workInProgress, renderExpirationTime);
+  workInProgress.providedContextChangedBits = 0;
+  if (__DEV__) {
+    ReactCurrentOwner.current = workInProgress;
+    setCurrentPhase('render');
+    nextContextValue = renderWithHooks(
+      current,
+      workInProgress,
+      Component,
+      newProps,
+      consumedContext,
+      renderExpirationTime,
+    );
+    if (
+      debugRenderPhaseSideEffects ||
+      (debugRenderPhaseSideEffectsForStrictMode &&
+        workInProgress.mode & StrictMode)
+    ) {
+      // Only double-render components with Hooks
+      if (workInProgress.memoizedState !== null) {
+        nextContextValue = renderWithHooks(
+          current,
+          workInProgress,
+          Component,
+          newProps,
+          consumedContext,
+          renderExpirationTime,
+        );
+      }
+    }
+    setCurrentPhase(null);
+  } else {
+    nextContextValue = renderWithHooks(
+      current,
+      workInProgress,
+      Component,
+      newProps,
+      consumedContext,
+      renderExpirationTime,
+    );
+  }
+
+  if (workInProgress.providedContextChangedBits === null) {
+    // auto detection if provided value changed
+    if (workInProgress.memoizedContextValue === nextContextValue) {
+      workInProgress.providedContextChangedBits = 0;
+    } else {
+      workInProgress.providedContextChangedBits = MAX_SIGNED_31_BIT_INT;
+    }
+  }
+
+  workInProgress.memoizedContextValue = nextContextValue;
+
+  pushProvider(workInProgress, nextContextValue);
+
+  if (current !== null && !didReceiveUpdate) {
+    bailoutHooks(current, workInProgress, renderExpirationTime);
+    return bailoutOnAlreadyFinishedWork(
+      current,
+      workInProgress,
+      renderExpirationTime,
+    );
+  }
+
+  if (workInProgress.providedContextChangedBits === 0) {
+    // No change. Bailout early if children are the same.
+    if (oldProps !== null && oldProps.children === newProps.children) {
+      return bailoutOnAlreadyFinishedWork(
+        current,
+        workInProgress,
+        renderExpirationTime,
+      );
+    }
+  } else {
+    // The context value changed. Search for matching consumers and schedule
+    // them to update.
+    propagateContextChange(
+      workInProgress,
+      providedContext,
+      workInProgress.providedContextChangedBits,
+      renderExpirationTime,
+    );
+  }
+
+  // React DevTools reads this flag.
+  workInProgress.effectTag |= PerformedWork;
+  const newChildren = newProps.children;
+  reconcileChildren(
+    current,
+    workInProgress,
+    newChildren,
     renderExpirationTime,
   );
   return workInProgress.child;
@@ -1854,6 +1967,7 @@ function updateContextProvider(
   renderExpirationTime: ExpirationTime,
 ) {
   const providerType: ReactProviderType<any> = workInProgress.type;
+
   const context: ReactContext<any> = providerType._context;
 
   const newProps = workInProgress.pendingProps;
@@ -2102,6 +2216,11 @@ function beginWork(
           pushProvider(workInProgress, newValue);
           break;
         }
+        case ContextFunctionProvider: {
+          const newValue = workInProgress.memoizedContextValue;
+          pushProvider(workInProgress, newValue);
+          break;
+        }
         case Profiler:
           if (enableProfilerTimer) {
             workInProgress.effectTag |= Update;
@@ -2282,6 +2401,12 @@ function beginWork(
         current,
         workInProgress,
         renderExpirationTime,
+      );
+    case ContextFunctionProvider:
+      return updateFunctionProviderComponent(
+        current,
+        workInProgress,
+        renderExpirationTime
       );
     case MemoComponent: {
       const type = workInProgress.type;

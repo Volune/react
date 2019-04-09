@@ -21,6 +21,7 @@ import {
   REACT_PORTAL_TYPE,
   REACT_PROFILER_TYPE,
   REACT_PROVIDER_TYPE,
+  REACT_FUNCTION_PROVIDER_TYPE,
   REACT_STRICT_MODE_TYPE,
   REACT_SUSPENSE_TYPE,
 } from 'shared/ReactSymbols';
@@ -106,6 +107,9 @@ export function isContextConsumer(object: any) {
 }
 export function isContextProvider(object: any) {
   return typeOf(object) === REACT_PROVIDER_TYPE;
+}
+export function isContextFunctionProvider(object: any) {
+  return typeOf(object) === REACT_FUNCTION_PROVIDER_TYPE;
 }
 export function isElement(object: any) {
   return (

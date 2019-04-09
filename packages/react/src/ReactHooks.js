@@ -112,12 +112,29 @@ export function useCallback(
   return dispatcher.useCallback(callback, inputs);
 }
 
+export function useMarkChangedBits(
+  bits: number,
+  deps: Array<mixed> | void | null,
+) {
+  const dispatcher = resolveDispatcher();
+  return dispatcher.useMarkChangedBits(bits, deps);
+}
+
 export function useMemo(
   create: () => mixed,
   inputs: Array<mixed> | void | null,
 ) {
   const dispatcher = resolveDispatcher();
   return dispatcher.useMemo(create, inputs);
+}
+
+export function useMemoProvidedValue(
+  create: () => mixed,
+  inputs: Array<mixed> | void | null,
+  bits: number | void,
+) {
+  const dispatcher = resolveDispatcher();
+  return dispatcher.useMemoProvidedValue(create, inputs, bits);
 }
 
 export function useImperativeHandle<T>(

@@ -47,6 +47,7 @@ import {
   ClassComponent,
   HostComponent,
   ContextProvider,
+  ContextFunctionProvider,
   ForwardRef,
   FunctionComponent,
   HostPortal,
@@ -348,6 +349,7 @@ if (__DEV__ && replayFailedUnitOfWorkWithInvokeGuardedCallback) {
       case HostPortal:
         popHostContainer(failedUnitOfWork);
         break;
+      case ContextFunctionProvider:
       case ContextProvider:
         popProvider(failedUnitOfWork);
         break;

@@ -41,6 +41,7 @@ export type ReactProvider<T> = {
 export type ReactProviderType<T> = {
   $$typeof: Symbol | number,
   _context: ReactContext<T>,
+  _component?: any,
 };
 
 export type ReactConsumer<T> = {

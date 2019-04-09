@@ -349,6 +349,55 @@ describe('ReactNewContext', () => {
         expect(ReactNoop.getChildren()).toEqual([span('Result: 12')]);
       });
 
+      it('nested providers with createProvider', () => {
+        const Context = React.createContext(1);
+        const Consumer = getConsumer(Context);
+        const Provider = Context.createProvider(props => {
+          const contextValue = useContext(Context);
+          const {value = contextValue * 2} = props;
+          React.useMarkChangedBits(1);
+          return value;
+        });
+
+        class Indirection extends React.Component {
+          shouldComponentUpdate() {
+            return false;
+          }
+          render() {
+            return this.props.children;
+          }
+        }
+
+        function App(props) {
+          return (
+            <Provider value={props.value}>
+              <Indirection>
+                <Provider>
+                  <Indirection>
+                    <Provider>
+                      <Indirection>
+                        <Consumer>
+                          {value => <span prop={'Result: ' + value} />}
+                        </Consumer>
+                      </Indirection>
+                    </Provider>
+                  </Indirection>
+                </Provider>
+              </Indirection>
+            </Provider>
+          );
+        }
+
+        ReactNoop.render(<App value={2} />);
+        expect(Scheduler).toFlushWithoutYielding();
+        expect(ReactNoop.getChildren()).toEqual([span('Result: 8')]);
+
+        // Update
+        ReactNoop.render(<App value={3} />);
+        expect(Scheduler).toFlushWithoutYielding();
+        expect(ReactNoop.getChildren()).toEqual([span('Result: 12')]);
+      });
+
       it('should provide the correct (default) values to consumers outside of a provider', () => {
         const FooContext = React.createContext({value: 'foo-initial'});
         const BarContext = React.createContext({value: 'bar-initial'});
@@ -600,6 +649,100 @@ describe('ReactNewContext', () => {
             </Context.Provider>
           );
         }
+
+        function Foo() {
+          return (
+            <Consumer unstable_observedBits={0b01}>
+              {value => {
+                Scheduler.yieldValue('Foo');
+                return <span prop={'Foo: ' + value.foo} />;
+              }}
+            </Consumer>
+          );
+        }
+
+        function Bar() {
+          return (
+            <Consumer unstable_observedBits={0b10}>
+              {value => {
+                Scheduler.yieldValue('Bar');
+                return <span prop={'Bar: ' + value.bar} />;
+              }}
+            </Consumer>
+          );
+        }
+
+        class Indirection extends React.Component {
+          shouldComponentUpdate() {
+            return false;
+          }
+          render() {
+            return this.props.children;
+          }
+        }
+
+        function App(props) {
+          return (
+            <Provider foo={props.foo} bar={props.bar}>
+              <Indirection>
+                <Indirection>
+                  <Foo />
+                </Indirection>
+                <Indirection>
+                  <Bar />
+                </Indirection>
+              </Indirection>
+            </Provider>
+          );
+        }
+
+        ReactNoop.render(<App foo={1} bar={1} />);
+        expect(Scheduler).toFlushAndYield(['Foo', 'Bar']);
+        expect(ReactNoop.getChildren()).toEqual([
+          span('Foo: 1'),
+          span('Bar: 1'),
+        ]);
+
+        // Update only foo
+        ReactNoop.render(<App foo={2} bar={1} />);
+        expect(Scheduler).toFlushAndYield(['Foo']);
+        expect(ReactNoop.getChildren()).toEqual([
+          span('Foo: 2'),
+          span('Bar: 1'),
+        ]);
+
+        // Update only bar
+        ReactNoop.render(<App foo={2} bar={2} />);
+        expect(Scheduler).toFlushAndYield(['Bar']);
+        expect(ReactNoop.getChildren()).toEqual([
+          span('Foo: 2'),
+          span('Bar: 2'),
+        ]);
+
+        // Update both
+        ReactNoop.render(<App foo={3} bar={3} />);
+        expect(Scheduler).toFlushAndYield(['Foo', 'Bar']);
+        expect(ReactNoop.getChildren()).toEqual([
+          span('Foo: 3'),
+          span('Bar: 3'),
+        ]);
+      });
+
+      it('can skip consumers with bitmask (with createProvider)', () => {
+        const Context = React.createContext({foo: 0, bar: 0});
+        const Consumer = getConsumer(Context);
+
+        const Provider = Context.createProvider(function Provider(props) {
+          const { foo: fooProp, bar: barProp } = props;
+          const foo = React.useMemoProvidedValue(
+            () => fooProp, [fooProp], 0b01);
+          const bar = React.useMemoProvidedValue(
+            () => barProp, [barProp], 0b10);
+          return {
+            foo,
+            bar,
+          };
+        });
 
         function Foo() {
           return (

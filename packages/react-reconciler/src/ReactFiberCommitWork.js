@@ -34,6 +34,7 @@ import {
   FunctionComponent,
   ForwardRef,
   ClassComponent,
+  ContextFunctionProvider,
   HostRoot,
   HostComponent,
   HostText,
@@ -233,6 +234,7 @@ function commitBeforeMutationLifeCycles(
 ): void {
   switch (finishedWork.tag) {
     case FunctionComponent:
+    case ContextFunctionProvider:
     case ForwardRef:
     case SimpleMemoComponent: {
       commitHookEffectList(UnmountSnapshot, NoHookEffect, finishedWork);
@@ -394,6 +396,7 @@ function commitLifeCycles(
 ): void {
   switch (finishedWork.tag) {
     case FunctionComponent:
+    case ContextFunctionProvider:
     case ForwardRef:
     case SimpleMemoComponent: {
       commitHookEffectList(UnmountLayout, MountLayout, finishedWork);
@@ -1159,6 +1162,7 @@ function commitWork(current: Fiber | null, finishedWork: Fiber): void {
 
   switch (finishedWork.tag) {
     case FunctionComponent:
+    case ContextFunctionProvider:
     case ForwardRef:
     case MemoComponent:
     case SimpleMemoComponent: {

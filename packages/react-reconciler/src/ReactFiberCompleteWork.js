@@ -27,6 +27,7 @@ import {
   HostText,
   HostPortal,
   ContextProvider,
+  ContextFunctionProvider,
   ContextConsumer,
   ForwardRef,
   Fragment,
@@ -729,6 +730,7 @@ function completeWork(
       popHostContainer(workInProgress);
       updateHostContainer(workInProgress);
       break;
+    case ContextFunctionProvider:
     case ContextProvider:
       // Pop provider fiber
       popProvider(workInProgress);

@@ -38,6 +38,7 @@ import {
   Fragment,
   Mode,
   ContextProvider,
+  ContextFunctionProvider,
   ContextConsumer,
   Profiler,
   SuspenseComponent,
@@ -63,6 +64,7 @@ import {
   REACT_STRICT_MODE_TYPE,
   REACT_PROFILER_TYPE,
   REACT_PROVIDER_TYPE,
+  REACT_FUNCTION_PROVIDER_TYPE,
   REACT_CONTEXT_TYPE,
   REACT_CONCURRENT_MODE_TYPE,
   REACT_SUSPENSE_TYPE,
@@ -207,6 +209,10 @@ export type Fiber = {|
   // This field is only set when the enableProfilerTimer flag is enabled.
   treeBaseDuration?: number,
 
+  // For context providers created with context.createProvider(...)
+  memoizedContextValue: any,
+  providedContextChangedBits: number | null,
+
   // Conceptual aliases
   // workInProgress : Fiber ->  alternate The alternate used for reuse happens
   // to be the same as work in progress.
@@ -252,6 +258,8 @@ function FiberNode(
   this.updateQueue = null;
   this.memoizedState = null;
   this.contextDependencies = null;
+  this.memoizedContextValue = null;
+  this.providedContextChangedBits = null;
 
   this.mode = mode;
 
@@ -388,6 +396,8 @@ export function createWorkInProgress(
       workInProgress._debugHookTypes = current._debugHookTypes;
     }
 
+    workInProgress.memoizedContextValue = current.memoizedContextValue;
+
     workInProgress.alternate = current;
     current.alternate = workInProgress;
   } else {
@@ -401,6 +411,8 @@ export function createWorkInProgress(
     workInProgress.nextEffect = null;
     workInProgress.firstEffect = null;
     workInProgress.lastEffect = null;
+
+    workInProgress.memoizedContextValue = current.memoizedContextValue;
 
     if (enableProfilerTimer) {
       // We intentionally reset, rather than copy, actualDuration & actualStartTime.
@@ -498,6 +510,9 @@ export function createFiberFromTypeAndProps(
           switch (type.$$typeof) {
             case REACT_PROVIDER_TYPE:
               fiberTag = ContextProvider;
+              break getTag;
+            case REACT_FUNCTION_PROVIDER_TYPE:
+              fiberTag = ContextFunctionProvider;
               break getTag;
             case REACT_CONTEXT_TYPE:
               // This is a consumer

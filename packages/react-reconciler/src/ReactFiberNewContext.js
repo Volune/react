@@ -8,6 +8,7 @@
  */
 
 import type {ReactContext} from 'shared/ReactTypes';
+import {ContextFunctionProvider} from '../../shared/ReactWorkTags';
 import type {Fiber} from './ReactFiber';
 import type {StackCursor} from './ReactFiberStack';
 import type {ExpirationTime} from './ReactFiberExpirationTime';
@@ -249,9 +250,9 @@ export function propagateContextChange(
         }
         dependency = dependency.next;
       }
-    } else if (fiber.tag === ContextProvider) {
+    } else if (fiber.tag === ContextProvider || fiber.tag === ContextFunctionProvider) {
       // Don't scan deeper if this is a matching provider
-      nextFiber = fiber.type === workInProgress.type ? null : fiber.child;
+      nextFiber = fiber.type._context === workInProgress.type._context ? null : fiber.child;
     } else if (
       enableSuspenseServerRenderer &&
       fiber.tag === DehydratedSuspenseComponent

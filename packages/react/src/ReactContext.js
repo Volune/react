@@ -7,9 +7,9 @@
  * @flow
  */
 
-import {REACT_PROVIDER_TYPE, REACT_CONTEXT_TYPE} from 'shared/ReactSymbols';
+import {REACT_PROVIDER_TYPE, REACT_CONTEXT_TYPE, REACT_FUNCTION_PROVIDER_TYPE} from 'shared/ReactSymbols';
 
-import type {ReactContext} from 'shared/ReactTypes';
+import type {ReactContext, ReactProviderType} from 'shared/ReactTypes';
 
 import warningWithoutStack from 'shared/warningWithoutStack';
 import warning from 'shared/warning';
@@ -48,6 +48,13 @@ export function createContext<T>(
     // These are circular
     Provider: (null: any),
     Consumer: (null: any),
+    createProvider(Component): ReactProviderType<T> {
+      return {
+        $$typeof: REACT_FUNCTION_PROVIDER_TYPE,
+        _context: context,
+        _component: Component,
+      };
+    },
   };
 
   context.Provider = {

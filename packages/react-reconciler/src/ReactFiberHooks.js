@@ -7,40 +7,39 @@
  * @flow
  */
 
-import type {ReactContext} from 'shared/ReactTypes';
-import type {SideEffectTag} from 'shared/ReactSideEffectTags';
-import type {Fiber} from './ReactFiber';
-import type {ExpirationTime} from './ReactFiberExpirationTime';
-import type {HookEffectTag} from './ReactHookEffectTags';
+import getComponentName from 'shared/getComponentName';
+
+import invariant from 'shared/invariant';
+import is from 'shared/objectIs';
 
 import ReactSharedInternals from 'shared/ReactSharedInternals';
-
+import type {SideEffectTag} from 'shared/ReactSideEffectTags';
+import {
+  Passive as PassiveEffect,
+  Update as UpdateEffect,
+} from 'shared/ReactSideEffectTags';
+import type {ReactContext} from 'shared/ReactTypes';
+import warning from 'shared/warning';
+import type {Fiber} from './ReactFiber';
+import {markWorkInProgressReceivedUpdate} from './ReactFiberBeginWork';
+import type {ExpirationTime} from './ReactFiberExpirationTime';
 import {NoWork} from './ReactFiberExpirationTime';
 import {readContext} from './ReactFiberNewContext';
 import {
-  Update as UpdateEffect,
-  Passive as PassiveEffect,
-} from 'shared/ReactSideEffectTags';
-import {
-  NoEffect as NoHookEffect,
-  UnmountMutation,
-  MountLayout,
-  UnmountPassive,
-  MountPassive,
-} from './ReactHookEffectTags';
-import {
-  scheduleWork,
   computeExpirationForFiber,
   flushPassiveEffects,
   requestCurrentTime,
+  scheduleWork,
   warnIfNotCurrentlyActingUpdatesInDev,
 } from './ReactFiberScheduler';
-
-import invariant from 'shared/invariant';
-import warning from 'shared/warning';
-import getComponentName from 'shared/getComponentName';
-import is from 'shared/objectIs';
-import {markWorkInProgressReceivedUpdate} from './ReactFiberBeginWork';
+import type {HookEffectTag} from './ReactHookEffectTags';
+import {
+  MountLayout,
+  MountPassive,
+  NoEffect as NoHookEffect,
+  UnmountMutation,
+  UnmountPassive,
+} from './ReactHookEffectTags';
 
 const {ReactCurrentDispatcher} = ReactSharedInternals;
 
@@ -69,7 +68,13 @@ export type Dispatcher = {
     deps: Array<mixed> | void | null,
   ): void,
   useCallback<T>(callback: T, deps: Array<mixed> | void | null): T,
+  useMarkChangedBits(bits: number, deps: Array<mixed> | void | null): void,
   useMemo<T>(nextCreate: () => T, deps: Array<mixed> | void | null): T,
+  useMemoProvidedValue<T>(
+    nextCreate: () => T,
+    deps: Array<mixed> | void | null,
+    bits: number | void,
+  ): T,
   useImperativeHandle<T>(
     ref: {current: T | null} | ((inst: T | null) => mixed) | null | void,
     create: () => T,
@@ -1046,6 +1051,72 @@ function updateMemo<T>(
   return nextValue;
 }
 
+function mountMarkChangedBits<T>(
+  bits: number,
+  deps: Array<mixed> | void | null,
+): T {
+  const hook = mountWorkInProgressHook();
+  hook.memoizedState = deps === undefined ? null : deps;
+  currentlyRenderingFiber.providedContextChangedBits |= bits;
+}
+
+function updateMarkChangedBits<T>(
+  bits: number,
+  deps: Array<mixed> | void | null,
+): T {
+  const hook = updateWorkInProgressHook();
+  const nextDeps = deps === undefined ? null : deps;
+  if (nextDeps !== null) {
+    const prevDeps: Array<mixed> | null = hook.memoizedState;
+    if (areHookInputsEqual(nextDeps, prevDeps)) {
+      // don't update bits
+      return;
+    }
+  }
+  currentlyRenderingFiber.providedContextChangedBits |= bits;
+}
+
+function mountMemoProvidedValue<T>(
+  nextCreate: () => T,
+  deps: Array<mixed> | void | null,
+  bits: number = 1,
+): T {
+  const hook = mountWorkInProgressHook();
+  const nextDeps = deps === undefined ? null : deps;
+  const nextValue = nextCreate();
+  hook.memoizedState = [nextValue, nextDeps];
+  currentlyRenderingFiber.providedContextChangedBits |= bits;
+  return nextValue;
+}
+
+function updateMemoProvidedValue<T>(
+  nextCreate: () => T,
+  deps: Array<mixed> | void | null,
+  bits: number = 1,
+): T {
+  const hook = updateWorkInProgressHook();
+  const nextDeps = deps === undefined ? null : deps;
+  const prevState = hook.memoizedState;
+  if (prevState !== null) {
+    // Assume these are defined. If they're not, areHookInputsEqual will warn.
+    if (nextDeps !== null) {
+      const prevDeps: Array<mixed> | null = prevState[1];
+      if (areHookInputsEqual(nextDeps, prevDeps)) {
+        // ensure providedContextChangedBits not null to mean it has been
+        // marked at least once
+        if (currentlyRenderingFiber.providedContextChangedBits === null) {
+          currentlyRenderingFiber.providedContextChangedBits = 0;
+        }
+        return prevState[0];
+      }
+    }
+  }
+  const nextValue = nextCreate();
+  hook.memoizedState = [nextValue, nextDeps];
+  currentlyRenderingFiber.providedContextChangedBits |= bits;
+  return nextValue;
+}
+
 function dispatchAction<S, A>(
   fiber: Fiber,
   queue: UpdateQueue<S, A>,
@@ -1184,7 +1255,9 @@ export const ContextOnlyDispatcher: Dispatcher = {
   useEffect: throwInvalidHookError,
   useImperativeHandle: throwInvalidHookError,
   useLayoutEffect: throwInvalidHookError,
+  useMarkChangedBits: throwInvalidHookError,
   useMemo: throwInvalidHookError,
+  useMemoProvidedValue: throwInvalidHookError,
   useReducer: throwInvalidHookError,
   useRef: throwInvalidHookError,
   useState: throwInvalidHookError,
@@ -1199,7 +1272,9 @@ const HooksDispatcherOnMount: Dispatcher = {
   useEffect: mountEffect,
   useImperativeHandle: mountImperativeHandle,
   useLayoutEffect: mountLayoutEffect,
+  useMarkChangedBits: mountMarkChangedBits,
   useMemo: mountMemo,
+  useMemoProvidedValue: mountMemoProvidedValue,
   useReducer: mountReducer,
   useRef: mountRef,
   useState: mountState,
@@ -1214,7 +1289,9 @@ const HooksDispatcherOnUpdate: Dispatcher = {
   useEffect: updateEffect,
   useImperativeHandle: updateImperativeHandle,
   useLayoutEffect: updateLayoutEffect,
+  useMarkChangedBits: updateMarkChangedBits,
   useMemo: updateMemo,
+  useMemoProvidedValue: updateMemoProvidedValue,
   useReducer: updateReducer,
   useRef: updateRef,
   useState: updateState,
@@ -1298,6 +1375,14 @@ if (__DEV__) {
       checkDepsAreArrayDev(deps);
       return mountLayoutEffect(create, deps);
     },
+    useMarkChangedBits<T>(
+      bits: number | void,
+      deps: Array<mixed> | void | null,
+    ): T {
+      currentHookNameInDev = 'useMarkChangedBits';
+      mountHookTypesDev();
+      return mountMarkChangedBits(bits, deps);
+    },
     useMemo<T>(create: () => T, deps: Array<mixed> | void | null): T {
       currentHookNameInDev = 'useMemo';
       mountHookTypesDev();
@@ -1306,6 +1391,22 @@ if (__DEV__) {
       ReactCurrentDispatcher.current = InvalidNestedHooksDispatcherOnMountInDEV;
       try {
         return mountMemo(create, deps);
+      } finally {
+        ReactCurrentDispatcher.current = prevDispatcher;
+      }
+    },
+    useMemoProvidedValue<T>(
+      create: () => T,
+      deps: Array<mixed> | void | null,
+      bits: number | void,
+    ): T {
+      currentHookNameInDev = 'useMemoProvidedValue';
+      mountHookTypesDev();
+      checkDepsAreArrayDev(deps);
+      const prevDispatcher = ReactCurrentDispatcher.current;
+      ReactCurrentDispatcher.current = InvalidNestedHooksDispatcherOnMountInDEV;
+      try {
+        return mountMemoProvidedValue(create, deps, bits);
       } finally {
         ReactCurrentDispatcher.current = prevDispatcher;
       }
@@ -1396,6 +1497,14 @@ if (__DEV__) {
       updateHookTypesDev();
       return mountLayoutEffect(create, deps);
     },
+    useMarkChangedBits<T>(
+      bits: number | void,
+      deps: Array<mixed> | void | null,
+    ): T {
+      currentHookNameInDev = 'useMarkChangedBits';
+      updateHookTypesDev();
+      return mountMarkChangedBits(bits, deps);
+    },
     useMemo<T>(create: () => T, deps: Array<mixed> | void | null): T {
       currentHookNameInDev = 'useMemo';
       updateHookTypesDev();
@@ -1403,6 +1512,22 @@ if (__DEV__) {
       ReactCurrentDispatcher.current = InvalidNestedHooksDispatcherOnMountInDEV;
       try {
         return mountMemo(create, deps);
+      } finally {
+        ReactCurrentDispatcher.current = prevDispatcher;
+      }
+    },
+    useMemoProvidedValue<T>(
+      create: () => T,
+      deps: Array<mixed> | void | null,
+      bits: number | void,
+    ): T {
+      currentHookNameInDev = 'useMemoProvidedValue';
+      updateHookTypesDev();
+      checkDepsAreArrayDev(deps);
+      const prevDispatcher = ReactCurrentDispatcher.current;
+      ReactCurrentDispatcher.current = InvalidNestedHooksDispatcherOnMountInDEV;
+      try {
+        return mountMemoProvidedValue(create, deps, bits);
       } finally {
         ReactCurrentDispatcher.current = prevDispatcher;
       }
@@ -1493,6 +1618,14 @@ if (__DEV__) {
       updateHookTypesDev();
       return updateLayoutEffect(create, deps);
     },
+    useMarkChangedBits<T>(
+      bits: number | void,
+      deps: Array<mixed> | void | null,
+    ): T {
+      currentHookNameInDev = 'useMarkChangedBits';
+      updateHookTypesDev();
+      return updateMarkChangedBits(bits, deps);
+    },
     useMemo<T>(create: () => T, deps: Array<mixed> | void | null): T {
       currentHookNameInDev = 'useMemo';
       updateHookTypesDev();
@@ -1500,6 +1633,21 @@ if (__DEV__) {
       ReactCurrentDispatcher.current = InvalidNestedHooksDispatcherOnUpdateInDEV;
       try {
         return updateMemo(create, deps);
+      } finally {
+        ReactCurrentDispatcher.current = prevDispatcher;
+      }
+    },
+    useMemoProvidedValue<T>(
+      create: () => T,
+      deps: Array<mixed> | void | null,
+      bits: number | void,
+    ): T {
+      currentHookNameInDev = 'useMemoProvidedValue';
+      updateHookTypesDev();
+      const prevDispatcher = ReactCurrentDispatcher.current;
+      ReactCurrentDispatcher.current = InvalidNestedHooksDispatcherOnMountInDEV;
+      try {
+        return updateMemoProvidedValue(create, deps, bits);
       } finally {
         ReactCurrentDispatcher.current = prevDispatcher;
       }
@@ -1596,6 +1744,15 @@ if (__DEV__) {
       mountHookTypesDev();
       return mountLayoutEffect(create, deps);
     },
+    useMarkChangedBits<T>(
+      bits: number | void,
+      deps: Array<mixed> | void | null,
+    ): T {
+      currentHookNameInDev = 'useMarkChangedBits';
+      warnInvalidHookAccess();
+      mountHookTypesDev();
+      return mountMarkChangedBits(bits, deps);
+    },
     useMemo<T>(create: () => T, deps: Array<mixed> | void | null): T {
       currentHookNameInDev = 'useMemo';
       warnInvalidHookAccess();
@@ -1604,6 +1761,23 @@ if (__DEV__) {
       ReactCurrentDispatcher.current = InvalidNestedHooksDispatcherOnMountInDEV;
       try {
         return mountMemo(create, deps);
+      } finally {
+        ReactCurrentDispatcher.current = prevDispatcher;
+      }
+    },
+    useMemoProvidedValue<T>(
+      create: () => T,
+      deps: Array<mixed> | void | null,
+      bits: number | void,
+    ): T {
+      currentHookNameInDev = 'useMemoProvidedValue';
+      warnInvalidHookAccess();
+      mountHookTypesDev();
+      checkDepsAreArrayDev(deps);
+      const prevDispatcher = ReactCurrentDispatcher.current;
+      ReactCurrentDispatcher.current = InvalidNestedHooksDispatcherOnMountInDEV;
+      try {
+        return mountMemoProvidedValue(create, deps, bits);
       } finally {
         ReactCurrentDispatcher.current = prevDispatcher;
       }
@@ -1704,6 +1878,15 @@ if (__DEV__) {
       updateHookTypesDev();
       return updateLayoutEffect(create, deps);
     },
+    useMarkChangedBits<T>(
+      bits: number | void,
+      deps: Array<mixed> | void | null,
+    ): T {
+      currentHookNameInDev = 'useMarkChangedBits';
+      warnInvalidHookAccess();
+      updateHookTypesDev();
+      return updateMarkChangedBits(bits, deps);
+    },
     useMemo<T>(create: () => T, deps: Array<mixed> | void | null): T {
       currentHookNameInDev = 'useMemo';
       warnInvalidHookAccess();
@@ -1712,6 +1895,22 @@ if (__DEV__) {
       ReactCurrentDispatcher.current = InvalidNestedHooksDispatcherOnUpdateInDEV;
       try {
         return updateMemo(create, deps);
+      } finally {
+        ReactCurrentDispatcher.current = prevDispatcher;
+      }
+    },
+    useMemoProvidedValue<T>(
+      create: () => T,
+      deps: Array<mixed> | void | null,
+      bits: number | void,
+    ): T {
+      currentHookNameInDev = 'useMemoProvidedValue';
+      warnInvalidHookAccess();
+      updateHookTypesDev();
+      const prevDispatcher = ReactCurrentDispatcher.current;
+      ReactCurrentDispatcher.current = InvalidNestedHooksDispatcherOnMountInDEV;
+      try {
+        return updateMemoProvidedValue(create, deps, bits);
       } finally {
         ReactCurrentDispatcher.current = prevDispatcher;
       }

@@ -24,6 +24,7 @@ import {
   HostComponent,
   HostPortal,
   ContextProvider,
+  ContextFunctionProvider,
   SuspenseComponent,
   DehydratedSuspenseComponent,
   IncompleteClassComponent,
@@ -493,6 +494,7 @@ function unwindWork(
     case HostPortal:
       popHostContainer(workInProgress);
       return null;
+    case ContextFunctionProvider:
     case ContextProvider:
       popProvider(workInProgress);
       return null;
@@ -528,6 +530,7 @@ function unwindInterruptedWork(interruptedWork: Fiber) {
     case HostPortal:
       popHostContainer(interruptedWork);
       break;
+    case ContextFunctionProvider:
     case ContextProvider:
       popProvider(interruptedWork);
       break;
